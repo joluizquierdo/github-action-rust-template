@@ -23,11 +23,37 @@ repository.
 Once you have your repository in place, you need to fill the configuration file
 called `config.yaml` located in the root directory.
 
-Finally, generate the template files by running the following command:
+> [!NOTE]
+> Refer to the [Configuration](#configuration) section for more details.
+
+Generate the template files by running the following commands:
+
+```bash
+cd rust-action
+```
 
 ```bash
 cargo run --example generate
 ```
+
+Once the files are generated you can remove the `templates` folder,
+the `config.yaml` the `rust-action/examples`
+and the `rust-action/Cargo.lock` files:
+
+```bash
+# I'm supposing you're in the `rust-action` directory
+rm -rf ../templates ../config.yaml examples Cargo.lock
+```
+
+Finally, commit the changes to your repository:
+
+```bash
+git add -A
+git commit -m "chore: initialize action from template"
+```
+
+You are ready to go!
+Start coding your GitHub Action in Rust.
 
 ## Features
 
