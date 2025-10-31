@@ -20,3 +20,7 @@ outputs:
   - name: "output2"
     description: "Description for output2."
     value: "default_output_value2"
+rust:
+  edition: "2024"
+  version: "0.1.0"
+  name: "rust-action"

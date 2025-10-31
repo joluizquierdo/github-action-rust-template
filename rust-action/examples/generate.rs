@@ -8,6 +8,7 @@ fn main() {
     let templates = vec![
         Template::new("action", "../templates/action.yml.j2", "../action.yml"),
         Template::new("readme", "../templates/README.md.j2", "../README.md"),
+        Template::new("cargo", "../templates/cargo.toml.j2", "Cargo.toml"),
     ];
 
     read_templates(&templates, &mut env);
@@ -21,6 +22,7 @@ struct Config {
     author: String,
     inputs: Vec<Input>,
     outputs: Vec<Output>,
+    rust: Rust,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,6 +38,12 @@ struct Output {
     name: String,
     description: String,
     value: String,
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct Rust {
+    name: String,
+    edition: String,
+    version: String,
 }
 
 #[derive(Debug)]
