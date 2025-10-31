@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 fn main() {
     let config = read_config("../config.yaml");
     let mut env = Environment::new();
+    env.set_trim_blocks(true);
     let templates = vec![
         Template::new("action", "../templates/action.yml.j2", "../action.yml"),
         Template::new("readme", "../templates/README.md.j2", "../README.md"),
