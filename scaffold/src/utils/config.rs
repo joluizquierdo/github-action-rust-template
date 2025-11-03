@@ -6,9 +6,8 @@ pub struct Config {
     action_name: String,
     description: String,
     author: String,
-    inputs: Vec<Input>,
-    outputs: Vec<Output>,
     rust: Rust,
+    github: Github,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     repository_name: Option<String>,
@@ -18,24 +17,18 @@ pub struct Config {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Input {
-    name: String,
-    description: String,
-    required: bool,
-    default: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Output {
-    name: String,
-    description: String,
-    value: String,
-}
-#[derive(Debug, Serialize, Deserialize)]
 struct Rust {
     name: String,
     edition: String,
     version: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Github {
+    runner: String,
 }
 
 impl Config {

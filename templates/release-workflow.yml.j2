@@ -1,0 +1,175 @@
+name: Release rust action
+
+on:
+  push:
+    tags:
+      - "v[0-9].*"
+    paths:
+      - "rust-action/**"
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create GitHub Release 🏷️
+    runs-on: {{ github.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check if release already exists 🔍
+        id: check_release
+        env:
+          GITHUB_TOKEN: {%raw %}${{ secrets.GITHUB_TOKEN }}
+{%endraw %}
+          TAG_NAME: {%raw %}${{ github.ref_name }}
+{%endraw %}
+          REPO_NAME: {%raw %}${{ github.repository }}
+{%endraw %}
+        run: |
+          set +e # Disable exit on error to handle the case where release does not exist
+
+          is_created=false
+          if gh release view "${TAG_NAME}" --repo "${REPO_NAME}"; then
+            echo "::warning::Release for tag '${TAG_NAME}' already exists in repository '${REPO_NAME}' 🚨 Skipping release creation. We will proceed to upload assets."
+            is_created=true
+          fi
+
+          echo "is_created=${is_created}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release 🚀
+        if: steps.check_release.outputs.is_created == 'false'
+        env:
+          GITHUB_TOKEN: {%raw %}${{ secrets.GITHUB_TOKEN }}
+{%endraw %}
+          TAG_NAME: {%raw %}${{ github.ref_name }}
+{%endraw %}
+          REPO_NAME: {%raw %}${{ github.repository }}
+{%endraw %}
+          CHANGELOG_PATH: {{ github.changelog_path | default('CHANGELOG.md') }}
+        run: |
+          if [ ! -f "$CHANGELOG_PATH" ]; then
+            echo "::warning::Changelog file not found at path: $CHANGELOG_PATH, using default realese notes."
+            echo "Automated release for tag '${TAG_NAME}' 📝" > "$CHANGELOG_PATH"
+          fi
+
+          echo "::info::Generating release notes '${TAG_NAME}' from changelog at path: $CHANGELOG_PATH"
+          gh release create "${TAG_NAME}" \
+            --repo "${REPO_NAME}" \
+            --title "${TAG_NAME}" \
+            -F "${CHANGELOG_PATH}"
+
+  upload:
+    name: Build and Upload Binaries 📦
+    strategy:
+      matrix:
+        # you can list all the targets using:
+        #   rustup target list
+        # please make sure the os is able to build for the target
+        include:
+          - target: {{ rust.target | default('x86_64-unknown-linux-gnu') }} 
+            os: {{ github.runner }}
+            features: ""
+          # other targets examples for macos and windows
+          # - target: x86_64-pc-windows-gnu
+          #   os: windows-latest
+          #   features: ""
+          # - target: aarch64-apple-darwin
+          #   os: macos-latest
+          #   features: ""
+
+
+    runs-on: {%raw %}${{ matrix.os }}
+{%endraw %}
+    needs: create-release
+    defaults:
+      run:
+        working-directory: {%raw %}${{ github.workspace }}/rust-action
+{%endraw %}
+    env:
+      BINARY_NAME: {{ rust.name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Rust 🔧
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: {%raw %}${{ matrix.target }}
+{%endraw %}
+          components: rustfmt, clippy
+
+      - name: Format check 🖌️
+        run: |
+          cargo fmt --all -- --check
+
+      - name: Linting 🕵️
+        run: |
+          cargo clippy --all-features -- -D warnings
+
+      - name: Run tests 🧪
+        run: |
+          cargo test --all-features
+
+      - name: Build ⚙️
+        env:
+          TARGET: {%raw %}${{ matrix.target }}
+{%endraw %}
+          FEATURES: {%raw %}${{ matrix.features }}
+{%endraw %}
+        shell: bash
+        run: |
+          cargo build \
+            --release \
+            --locked \
+            --features "${FEATURES}" \
+            --target "${TARGET}"
+
+      - name: Upload Release Binary 📦
+        env:
+          GITHUB_TOKEN: {%raw %}${{ secrets.GITHUB_TOKEN }}
+{%endraw %}
+          TARGET: {%raw %}${{ matrix.target }}
+{%endraw %}
+          REPO_NAME: {%raw %}${{ github.repository }}
+{%endraw %}
+          TAG_NAME: {%raw %}${{ github.ref_name }}
+{%endraw %}
+          OS: {%raw %}${{ matrix.os }}
+{%endraw %}
+        shell: bash
+        run: |
+          asset_path="target/${TARGET}/release"
+          rust_binary_path="${asset_path}/rust-action"
+          binary_full_name="${BINARY_NAME}_${TAG_NAME}_${TARGET}"
+          windows_build=false
+
+          if [[ "${OS}" =~ "windows" ]]; then
+            rust_binary_path="${rust_binary_path}.exe"
+            windows_build=true
+          fi
+
+          if [ ! -f "${rust_binary_path}" ]; then
+            echo "::error::Built binary not found at path: '${rust_binary_path}'"
+            exit 1
+          fi
+
+          if [ ${windows_build} = true ]; then
+            binary_full_name="${binary_full_name}.exe"
+            binary_compressed_name="${binary_full_name}.zip"
+            mv "${rust_binary_path}" "${binary_full_name}"
+
+            7z a -tzip "${binary_compressed_name}" "${binary_full_name}"
+          else
+            binary_compressed_name="${binary_full_name}.tar.gz"
+            mv "${rust_binary_path}" "${binary_full_name}"
+
+            tar -czf "${binary_compressed_name}" "${binary_full_name}"
+          fi
+
+          echo "::info::Uploading build artifact for target '${TARGET}' to release '${TAG_NAME}'"
+          gh release upload "${TAG_NAME}" \
+            --repo "${REPO_NAME}" \
+            "${binary_compressed_name}" \
+            --clobber
+

@@ -29,9 +29,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &join_path(&current_dir, "README.md"),
         ),
         Template::new(
-            "test-action",
-            &join_path(&current_dir, "templates/test-action.yml.j2"),
-            &join_path(&current_dir, ".github/workflows/test_action.yml"),
+            "test-workflow",
+            &join_path(&current_dir, "templates/test-workflow.yml.j2"),
+            &join_path(&current_dir, ".github/workflows/test.yml"),
+        ),
+        Template::new(
+            "release-workflow",
+            &join_path(&current_dir, "templates/release-workflow.yml.j2"),
+            &join_path(&current_dir, ".github/workflows/release.yml"),
         ),
     ];
 
