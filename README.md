@@ -28,21 +28,19 @@ called `config.yaml` located in the root directory.
 
 Generate the template files by running the following commands:
 
+First, compile the scaffold project to generate the files:
+
 ```bash
-cd rust-action
+cargo build --release --target-dir /tmp/rust --manifest-path scaffold/Cargo.toml
 ```
 
-```bash
-cargo run --example generate
-```
+> [!NOTE]
+> The `--target-dir /tmp/rust` flag is used to avoid polluting your project's with build artifacts. You can change the path to any temporary directory of your choice.
 
-Once the files are generated you can remove the `templates` folder,
-the `config.yaml` the `rust-action/examples`
-and the `rust-action/Cargo.lock` files:
+Second, run the compiled binary to scaffold your action:
 
 ```bash
-# I'm supposing you're in the `rust-action` directory
-rm -rf ../templates ../config.yaml examples Cargo.lock
+/tmp/release/scaffold
 ```
 
 Finally, commit the changes to your repository:
