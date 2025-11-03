@@ -40,13 +40,17 @@ cargo build --release --target-dir /tmp/rust --manifest-path scaffold/Cargo.toml
 Second, run the compiled binary to scaffold your action:
 
 ```bash
-/tmp/release/scaffold
+/tmp/rust/release/scaffold
 ```
 
 Finally, commit the changes to your repository:
 
 ```bash
 git add -A
+
+```
+
+```bash
 git commit -m "chore: initialize action from template"
 ```
 
