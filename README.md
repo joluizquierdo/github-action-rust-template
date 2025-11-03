@@ -1,120 +1,185 @@
-# GitHub Rust action template
+# GitHub Action Rust Template
 
-<!---
-This file is part of joluizquierdo/github-action-rust-template.
-Copyright (C) 2025 joluizquierdo
-Licensed under the GNU GPL v3. See LICENSE file in root directory.
---->
+**Oxidize your GitHub Actions with Rust! 🦀**  
+A template repository for building native GitHub Actions using Rust.
 
-> [!WARNING]
-> This is a Work In Progress. Features and documentation may change drastically
-> until the first stable release.
+## Overview
 
-Oxidize your GitHub Actions with Rust! This repository provides a template for
-creating GitHub Actions using Rust, allowing you to leverage Rust's performance
-and safety features in your CI/CD workflows.
+This repository lets you create GitHub Actions using **Rust**, taking advantage of its speed and reliability.  
+Supports official GitHub runners (`ubuntu-latest`, `windows-latest`, `macos-latest`) and can be tailored for self-hosted environments.
 
-## Usage
+The approach uses a **composite GitHub workflow** to download and execute
+pre-compiled Rust binaries, ensuring compatibility across platforms without
+requiring Rust installation on the caller github runner or dealing with docker images.
 
-To use this template, simply click the "Use this template" button on the GitHub
-page and create a new repository based on it. Optionally, you can clone the
-repository.
+## Getting Started
 
-Once you have your repository in place, you need to fill the configuration file
-called `config.yaml` located in the root directory.
+### 1. Create Your Action Repository
 
-> [!NOTE]
-> Refer to the [Configuration](#configuration) section for more details.
+- Click **"Use this template"** on GitHub  
+  or clone with:
 
-Generate the template files by running the following commands:
+  ```bash
+  git clone https://github.com/joluizquierdo/github-action-rust-template.git
+  ```
 
-First, compile the scaffold project to generate the files:
+### 2. Configure
+
+Edit the `config.yaml` at the root of your new repository.  
+See [Configuration](#configuration) for details.
+
+### 3. Generate Template Files
+
+Compile the scaffold tool and generate your action files:
 
 ```bash
 cargo build --release --target-dir /tmp/rust --manifest-path scaffold/Cargo.toml
-```
-
-> [!NOTE]
-> The `--target-dir /tmp/rust` flag is used to avoid polluting your project's with build artifacts. You can change the path to any temporary directory of your choice.
-
-Second, run the compiled binary to scaffold your action:
-
-```bash
 /tmp/rust/release/scaffold
 ```
 
-Commit the changes to your repository:
+_You may change `/tmp/rust` to any temporary directory of your choice._
+
+### 4. Commit and Push
 
 ```bash
 git add -A
-
-```
-
-```bash
 git commit -m "chore: initialize action from template"
-```
-
-Push the changes to your remote repository:
-
-```bash
 git push origin main
 ```
 
-if you want to create the first release, tag the commit and push the tag:
+### 5. Tag Releases
+
+To create a release, tag and push:
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-You are ready to go! Each time you want to create a new release, just create a new tag and push it to the remote repository.
+Here is the **final Features section** for your README, precisely describing how the template works, including how inputs are passed via CLI arguments and how outputs, logging, secrets, and platform support are handled:
 
 ## Features
 
-### Write Github Actions outputs in rust
+- **Define Action Inputs (YAML + Rust):**
+  - Inputs are declared in your `action.yml` (or the template `action.yml.j2`) under the `inputs:` section, specifying `description`, `required`, and `default` values.
+  - Inputs are _not_ available as environment variables; instead, each input is forwarded as a CLI argument when invoking your Rust binary.
+  - You must declare matching fields in your Rust code’s `Args` struct, using the `clap` crate to parse arguments (e.g., `--name`, `--surname`).
 
-You just need to write to the file path specified in the `GITHUB_OUTPUT` environment
-variable.
+    **Example (in action.yml):**
 
-```rust
-use std::env;
-use std::fs::OpenOptions;
-use std::io::Write;
-fn main() -> std::io::Result<()> {
-    let output_path = env::var("GITHUB_OUTPUT").expect("GITHUB_OUTPUT not set");
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(output_path)?;
+    ```yaml
+    - name: "Run the rust binary"
+      shell: bash
+      id: rust_binary
+      run: |
+        "${BINARY_PATH}" --name "${{ inputs.name }}" --surname "${{ inputs.surname }}"
+    ```
 
-    writeln!(file, "my_output_key=my_output_value")?;
-    Ok(())
-}
-```
+    **Example (in Rust):**
 
-Finally, in the composite action (`action.yml`) you can expose the output:
+    ```rust
+    #[derive(Parser, Debug)]
+    struct Args {
+        #[clap(long)]
+        name: String,
+        #[clap(long)]
+        surname: String,
+    }
+    ```
 
-```yaml
-outputs:
-  my_output_key: ${{ steps.rust_action_step.outputs.my_output_key }}
-```
+- **Produce GitHub Action Outputs (Rust):**
+  - Action outputs are created by writing `key=value` lines to the file path specified by the `GITHUB_OUTPUT` environment variable.
+  - The template provides helper functions (`set_output`) to simplify writing outputs in Rust.
+  - Outputs are exposed to subsequent workflow steps via the `outputs` section in `action.yml`.
+
+    **Example (in Rust):**
+
+    ```rust
+    github_context.set_output("greeting-message", &full_greeting);
+    ```
+
+    **Example (in action.yml):**
+
+    ```yaml
+    outputs:
+      greeting-message:
+        description: "The complete greeting message."
+        value: "${{ steps.rust_binary.outputs.greeting-message }}"
+    ```
+
+- **Logging and Workflow Notices (Rust):**
+  - Use logging helpers to emit workflow notices:
+
+    ```rust
+    log_notice("Your message here");
+    ```
+
+  - Displays messages in the GitHub Action logs.
+
+- **Masking Secrets (Rust):**
+  - Hide sensitive values from logs using mask helpers:
+
+    ```rust
+    set_secret(&token);
+    ```
+
+  - Uses the GitHub Actions `::add-mask::` command.
+
+- **Robust Error Handling:**
+  - Rust code uses `Result<T>`, `?`, and `.expect()` for safe error handling of missing environment variables and IO errors.
+
+- **Platform-Agnostic Composite Workflow:**
+  - The template supports Linux, macOS, and Windows runners.
+  - Handles platform-specific environment setup and binary extraction, enabling cross-platform workflows.
+
+- **Download and Invoke Rust Binaries:**
+  - Composite workflow steps handle downloading pre-compiled binaries from GitHub releases, extracting artifacts, setting execution permissions, and running the binary with provided inputs.
 
 ## Configuration
 
-## Gotchas
+Customize your action via the `config.yaml`. The following table explains each configurable setting:
 
-- You can use self-hosted runners, but you need to ensure that the build runner has
-  the necessary Rust toolchain installed. If you are using windows you will also
-  requite to install `7z` to be able to extract the compiled binaries. On the
-  other hand, if you are using linux or macOS self-hosted runners, you will
-  require to install `tar` to be able to extract the compiled binaries.
-- You will require curl in the self-hosted runner to download the compiled binaries from the release assets.
-  Make sure that curl is installed on the runner.
-- The workflow to compile the rust binaries do it natively.
-  No cross-compiling is supported at the moment.
-  Therefore, ensure that the runner's OS
-  matches the target OS of your action.
-- workflows are a little verbose
-- windows runner must install `bash` script interpreter to be able to run the action.
-- Is this worth it? Rust is a great language, but is it worth the complexity of
-  using it for GitHub Actions? Evaluate your needs before choosing this template. Take into account that running this action will require two http calls to download the binaries from the release assets. Maybe, implementing caching in some way? If you have a better idea, please open an issue or a PR.
-- I tested the action for github official runners (ubuntu-latest, windows-latest and macos-latest) and it works fine. I don't tested it on self-hosted runners extensively. Please open an issue if you find any problem.
+| Field         | Description                | Example Value                            |
+| ------------- | -------------------------- | ---------------------------------------- |
+| action_name   | Name of your GitHub Action | "Your action name here"                  |
+| description   | Brief description          | "A brief description of your action."    |
+| author        | Author name                | "Your Name"                              |
+| rust.edition  | Rust edition               | "2024"                                   |
+| rust.version  | Rust project version       | "0.1.0"                                  |
+| rust.name     | Rust project name          | "rust-action"                            |
+| rust.target   | Target platform            | "x86_64-unknown-linux-gnu"               |
+| github.runner | GitHub runner OS or label  | "ubuntu-latest" or "[self-hosted, XXXX]" |
+
+> [!NOTE]
+> When setting the `github.runner` field for self-hosted runner don't forget to include the '[]' brackets in the
+> string value.
+
+## Gotchas & Requirements
+
+- **Self-hosted runners:**
+  - _Rust toolchain must be installed_.
+  - Windows: install `7z` and `bash`.
+  - Linux/macOS: install `tar`.
+  - All runners: ensure `curl` is installed.
+- **No cross-compilation:**  
+  Runner OS must match the action’s target OS.
+- **Action setup requires two HTTP calls** to download binaries from release assets. Consider caching if needed.
+- **Limited self-hosted runner testing:**  
+  Template tested on official runners; please report self-hosted issues via GitHub.
+
+## Should I use Rust for GitHub Actions?
+
+Rust delivers excellent performance and safety, but using it for Actions does add complexity. Ensure the benefits fit your project needs.
+
+---
+
+## Contributing
+
+Improvements are welcome—whether for caching, runners, documentation, or functionality.
+Open an [issue](https://github.com/joluizquierdo/github-action-rust-template/issues) or pull request.
+
+---
+
+## License
+
+This project is licensed under the [GPL-3.0](./LICENSE.txt).
