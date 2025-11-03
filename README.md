@@ -43,7 +43,7 @@ Second, run the compiled binary to scaffold your action:
 /tmp/rust/release/scaffold
 ```
 
-Finally, commit the changes to your repository:
+Commit the changes to your repository:
 
 ```bash
 git add -A
@@ -54,8 +54,20 @@ git add -A
 git commit -m "chore: initialize action from template"
 ```
 
-You are ready to go!
-Start coding your GitHub Action in Rust.
+Push the changes to your remote repository:
+
+```bash
+git push origin main
+```
+
+if you want to create the first release, tag the commit and push the tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+You are ready to go! Each time you want to create a new release, just create a new tag and push it to the remote repository.
 
 ## Features
 
