@@ -7,23 +7,138 @@ name: "{{ action_name }}"
 description: "{{ description }}"
 author: "{{ author }}"
 inputs:
-{% for input in inputs %}
-  {{ input.name }}:
-    description: "{{ input.description }}"
-    required: {{ input.required | lower }}
-{% if input.default is defined %}
-    default: "{{ input.default }}"
-{% endif %}
-{% endfor %}
+  github-token:
+    description: "GitHub token for authentication."
+    required: true
+  artifact-owner:
+    description: "Owner of the repository where artifacts are stored."
+    required: true
+  artifact-repository:
+    description: "Repository where artifacts will be downloaded from."
+    required: true
+  artifact-version:
+    description: "Version of the artifact to download."
+    required: false
+    default: "latest"
+  # Inputs for the rust binary execution
+  name:
+    description: "Name to greet."
+    required: true
+  surname:
+    description: "Surname to greet."
+    required: false
+    default: "Doe"
 outputs:
-{% for output in outputs %}
-  {{ output.name }}:
-    description: "{{ output.description }}"
-    value: "{{ output.value }}"
-{% endfor %}
+  greeting-message:
+    description: "The complete greeting message."
+    value: {%raw %}"${{ steps.rust_binary.outputs.greeting-message }}"
+{%endraw %}
 runs:
   using: "composite"
   steps:
-    - name: "hello world"
+    - name: "Set up environment variables"
       shell: bash
-      run: echo "Hello, world!"
+      env:
+        RUNNER_OS: {%raw %}${{ runner.os }}
+{%endraw %}
+      run: |
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          OS_NAME="windows"
+        elif [[ "$RUNNER_OS" == "Linux" ]]; then
+          OS_NAME="linux"
+        elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          OS_NAME="apple"
+        else
+          echo "::error::Unsupported OS: '$RUNNER_OS'"
+          exit 1
+        fi
+
+        echo "OS_NAME=${OS_NAME}" >> "$GITHUB_ENV"
+        echo "GITHUB_TOKEN={%raw %}${{ inputs.github-token }}" >> "$GITHUB_ENV"
+{%endraw %}
+        echo "ARTIFACT_OWNER={%raw %}${{ inputs.artifact-owner }}" >> "$GITHUB_ENV"
+{%endraw %}
+        echo "ARTIFACT_REPOSITORY={%raw %}${{ inputs.artifact-repository }}" >> "$GITHUB_ENV"
+{%endraw %}
+        echo "ARTIFACT_VERSION={%raw %}${{ inputs.artifact-version }}" >> "$GITHUB_ENV"
+{%endraw %}
+        echo "GITHUB_API_URL=https://api.github.com" >> "$GITHUB_ENV"
+        echo "GITHUB_API_VERSION=2022-11-28" >> "$GITHUB_ENV"
+        echo "ARTIFACT_PATH=./artifact_download" >> "$GITHUB_ENV"
+
+    - name: "Download and extract rust artifact"
+      shell: bash
+      id: download_binary
+      run: |
+
+        api_url="${GITHUB_API_URL}/repos/${ARTIFACT_OWNER}/${ARTIFACT_REPOSITORY}/releases/${ARTIFACT_VERSION}"
+        echo "::debug::Downloading rust artifact from '${api_url}' for OS: '${OS_NAME}'"
+        artifact_download_url=$(curl -Ls \
+          -H "Accept: application/json" \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          -H "X-GitHub-Api-Version: ${GITHUB_API_VERSION}" \
+          "${api_url}" | jq -r ".assets[] | select(.name | test(\".*${OS_NAME}.*\")) | .browser_download_url")
+        if [ -z "${artifact_download_url}" ]; then
+          echo "::error::No artifact found for OS: '${OS_NAME}'"
+          exit 1
+        elif [ $(echo "${artifact_download_url}" | wc -l) -gt 1 ]; then
+          echo "::error::Multiple artifacts found for OS: '${OS_NAME}'"
+          exit 1
+        fi
+        echo "::debug::Found artifact download URL: '${artifact_download_url}'"
+
+        artifact_file_name=$(basename "${artifact_download_url}")
+        download_path="${ARTIFACT_PATH}/${artifact_file_name}"
+        echo "::debug::Downloading artifact to '${download_path}'..."
+        mkdir -p $ARTIFACT_PATH
+        curl -Ls \
+          -H "Accept: application/octet-stream" \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          -H "X-GitHub-Api-Version: ${GITHUB_API_VERSION}" \
+          -o "${download_path}" \
+          "${artifact_download_url}"
+
+        echo "::debug::Extracting artifact..."
+        if [[ "${OS_NAME}" == "windows" ]]; then
+          7z x "${download_path}" -o"${ARTIFACT_PATH}"
+        else
+          tar -xzf "${download_path}" -C "${ARTIFACT_PATH}"
+        fi
+
+        echo "::debug::Cleaning up downloaded archive..."
+        rm "${download_path}"
+
+        if [[ "${OS_NAME}" == "windows" ]]; then
+          binary_path="${download_path%.zip}"
+        else
+          binary_path="${download_path%.tar.gz}"
+        fi
+
+        if [ ! -f "${binary_path}" ]; then
+          echo "::error::Extracted binary not found at path: '${binary_path}'"
+          exit 1
+        fi
+        echo "::debug::Binary extracted to '${binary_path}'"
+        echo "::debug::Give execute permissions to the binary"
+        if [[ "${OS_NAME}" != "windows" ]]; then
+          chmod +x "${binary_path}"
+        fi
+
+        echo "binary_path=${binary_path}" >> "$GITHUB_OUTPUT"
+
+    - name: "Run the rust binary"
+      shell: bash
+      id: rust_binary
+      env:
+        BINARY_PATH: {%raw %}${{ steps.download_binary.outputs.binary_path }}
+{%endraw %}
+        NAME: {%raw %}"${{ inputs.name }}"
+{%endraw %}
+        SURNAME: {%raw %}"${{ inputs.surname }}"
+{%endraw %}
+      run: |
+        echo "::debug::Running the rust binary at '${BINARY_PATH}'"
+        "${BINARY_PATH}" \
+          --name "${NAME}" \
+          --surname "${SURNAME}"
+
